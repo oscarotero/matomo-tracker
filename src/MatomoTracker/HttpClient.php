@@ -10,11 +10,10 @@ class HttpClient
     protected $data;
     protected $userAgent;
     protected $acceptLanguage;
-    protected $timeout;
-    protected $proxy;
-    protected $cookies;
-
-    protected $incomingBody = '';
+    protected $timeout = 1;
+    protected $cookies = [];
+    protected $headers = [];
+    protected $content = '';
 
     public function __construct(string $method, string $url)
     {
@@ -25,47 +24,46 @@ class HttpClient
     public function setData($data): self
     {
         $this->data = $data;
+
         return $this;
     }
 
     public function setUserAgent($userAgent): self
     {
         $this->userAgent = $userAgent;
+
         return $this;
     }
 
-    public function setAcceptLanguage($acceptLanguage): self
+    public function addHeader(string $header): self
     {
-        $this->acceptLanguage = $acceptLanguage;
+        $this->headers[] = $header;
+
         return $this;
     }
 
     public function setTimeout(int $timeout): self
     {
         $this->timeout = $timeout;
-        return $this;
-    }
 
-    public function setProxy($proxy): self
-    {
-        $this->proxy = $proxy;
         return $this;
     }
 
     public function setCookies(array $cookies): self
     {
         $this->cookies = $cookies;
+
         return $this;
     }
 
     public function getCookies(): array
     {
-        return $this->incomingCookies;
+        return $this->cookies;
     }
 
-    public function getBody(): string
+    public function getContent(): string
     {
-        return $this->body;
+        return $this->content;
     }
 
     public function send()
@@ -76,39 +74,29 @@ class HttpClient
             CURLOPT_HEADER => true,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "Accept-Language: {$this->acceptLanguage}",
-            ],
+            CURLOPT_HTTPHEADER => $this->headers,
         ];
-
-        if (defined('PATH_TO_CERTIFICATES_FILE')) {
-            $options[CURLOPT_CAINFO] = PATH_TO_CERTIFICATES_FILE;
-        }
-
-        if (isset($this->proxy)) {
-            $options[CURLOPT_PROXY] = $this->proxy;
-        }
 
         if ($this->method === 'POST') {
             $options[CURLOPT_POST] = true;
         }
 
-        // only supports JSON data
         if (!empty($this->data)) {
-            $options[CURLOPT_HTTPHEADER][] = 'Content-Type: application/json';
-            $options[CURLOPT_HTTPHEADER][] = 'Expect:';
-            $options[CURLOPT_POSTFIELDS] = $data;
+            $options[CURLOPT_POSTFIELDS] = $this->data;
         }
 
         if (!empty($this->cookies)) {
             $options[CURLOPT_COOKIE] = http_build_query($this->cookies);
         }
 
-        $ch = curl_init();
-        curl_setopt_array($ch, $options);
+        $connection = curl_init();
+        curl_setopt_array($connection, $options);
+
         ob_start();
-        $response = @curl_exec($ch);
+        $response = @curl_exec($connection);
+        curl_close($connection);
         ob_end_clean();
+
         $header = $content = '';
 
         if (!empty($response)) {
@@ -121,12 +109,10 @@ class HttpClient
 
     /**
      * Reads incoming tracking server cookies.
-     *
-     * @param $headers Array with HTTP response headers as values
      */
     private static function parseCookies(array $headers): array
     {
-        $cookies = [];
+        $parsedCookies = [];
 
         if (!empty($headers)) {
             $headerName = 'set-cookie:';
@@ -144,10 +130,10 @@ class HttpClient
                     $cookies = substr($cookies, 0, $posEnd);
                 }
 
-                parse_str($cookies, $cookies);
+                parse_str($cookies, $parsedCookies);
             }
         }
 
-        return $cookies;
+        return $parsedCookies;
     }
 }

@@ -37,6 +37,9 @@ class MatomoTracker implements MiddlewareInterface
     {
         $tracker = new MatomoTracker\Tracker($request, $this->apiUrl, $this->idSite);
 
-        return $handler->handle($request);
+        $response = $handler->handle($request->withAttribute($this->attribute, $tracker));
+        $tracker->createRequest()->send();
+
+        return $response;
     }
 }
