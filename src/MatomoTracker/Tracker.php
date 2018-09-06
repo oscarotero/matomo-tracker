@@ -4,6 +4,7 @@ declare(strict_types = 1);
 namespace Middlewares\MatomoTracker;
 
 use InvalidArgumentException;
+use Exception;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
@@ -36,6 +37,15 @@ class Tracker
     private $request;
     private $apiUrl;
 
+    public $idSite;
+    public $pageCharset;
+    public $ip;
+    public $proxy;
+    public $proxyPort;
+    public $currentTs;
+    public $createTs;
+    public $acceptLanguage;
+    public $visitorCustomVar;
     public $ecommerceItems = [];
     public $attributionInfo;
     public $eventCustomVar = [];
@@ -959,10 +969,6 @@ class Tracker
      */
     public function setUserId(string $userId): self
     {
-        if ($userId === false) {
-            $this->setNewVisitorId();
-            return $this;
-        }
         if ($userId === '') {
             throw new Exception('User ID cannot be empty.');
         }
@@ -1197,12 +1203,12 @@ class Tracker
      * Sets the maximum number of seconds that the tracker will spend waiting for a response
      * from Piwik.
      *
-     * @throws Exception
+     * @throws InvalidArgumentException
      */
     public function setRequestTimeout(int $timeout): self
     {
-        if (!is_int($timeout) || $timeout < 0) {
-            throw new Exception("Invalid value supplied for request timeout: $timeout");
+        if ($timeout < 0) {
+            throw new InvalidArgumentException("Invalid value supplied for request timeout: $timeout");
         }
 
         $this->requestTimeout = $timeout;
@@ -1302,7 +1308,7 @@ class Tracker
 
         $this->incomingTrackerCookies = $client->getCookies();
 
-        return $content;
+        return $client->getContent();
     }
 
     /**
@@ -1340,11 +1346,6 @@ class Tracker
     private function getRequest(int $idSite)
     {
         $this->setFirstPartyCookies();
-
-        $customFields = '';
-        if (!empty($this->customParameters)) {
-            $customFields = '&' . http_build_query($this->customParameters, '', '&');
-        }
 
         $getParams = $this->request->getQueryParams();
 
@@ -1418,7 +1419,7 @@ class Tracker
 
             // DEBUG
             //$this->DEBUG_APPEND_URL;
-        ]);
+        ] + $this->customParameters);
 
         $url = $this->getBaseUrl().$query;
 
@@ -1436,7 +1437,7 @@ class Tracker
     /**
      * Returns a first party cookie which name contains $name
      *
-     * @return string String value of cookie, or false if not found
+     * @return string|bool String value of cookie, or false if not found
      * @ignore
      */
     private function getCookieMatchingName(string $name)
