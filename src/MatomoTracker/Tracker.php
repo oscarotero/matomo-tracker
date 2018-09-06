@@ -28,103 +28,14 @@ use Psr\Http\Message\ServerRequestInterface;
 class Tracker
 {
     /**
-     * Used in tests to output useful error messages.
-     *
-     * @ignore
-     */
-    public static $DEBUG_LAST_REQUESTED_URL = false;
-
-    private $request;
-    private $apiUrl;
-
-    public $idSite;
-    public $pageCharset;
-    public $ip;
-    public $proxy;
-    public $proxyPort;
-    public $currentTs;
-    public $createTs;
-    public $acceptLanguage;
-    public $visitorCustomVar;
-    public $ecommerceItems = [];
-    public $attributionInfo;
-    public $eventCustomVar = [];
-    public $forcedDatetime = false;
-    public $forcedNewVisit = false;
-    public $generationTime = false;
-    public $pageCustomVar = false;
-    public $customParameters = [];
-    public $customData = false;
-    public $hasCookies = false;
-    public $token_auth = false;
-    public $country = false;
-    public $region = false;
-    public $city = false;
-    public $lat = false;
-    public $long = false;
-    public $width = false;
-    public $height = false;
-    public $plugins = [];
-    public $localHour = false;
-    public $localMinute = false;
-    public $localSecond = false;
-    public $idPageview = false;
-    public $sendImageResponse = true;
-    public $outgoingTrackerCookies = [];
-    public $incomingTrackerCookies = [];
-
-    // Life of the visitor cookie (in sec)
-    public $configVisitorCookieTimeout = 33955200; // 13 months (365 + 28 days)
-    // Life of the session cookie (in sec)
-    public $configSessionCookieTimeout = 1800; // 30 minutes
-    // Life of the session cookie (in sec)
-    public $configReferralCookieTimeout = 15768000; // 6 months
-
-    // Visitor Ids in order
-    public $userId = false;
-    public $forcedVisitorId = false;
-    public $cookieVisitorId = false;
-    public $randomVisitorId = false;
-    public $visitCount = 0;
-    public $currentVisitTs = false;
-    public $lastVisitTs = false;
-    public $ecommerceLastOrderTimestamp = false;
-
-    // Allow debug while blocking the request
-    public $requestTimeout = 600;
-    public $doBulkRequests = false;
-    public $storedTrackingActions = [];
-
-    public $configCookiesDisabled = false;
-    public $configCookiePath = self::DEFAULT_COOKIE_PATH;
-    public $configCookieDomain = '';
-
-    /**
      * API Version
-     *
-     * @ignore
-     * @var int
      */
     const VERSION = 1;
 
     /**
-     * @ignore
-     */
-    public $DEBUG_APPEND_URL = '';
-
-    /**
      * Visitor ID length
-     *
-     * @ignore
      */
-    const LENGTH_VISITOR_ID = 16;
-
-    /**
-     * Charset
-     * @see setPageCharset
-     * @ignore
-     */
-    const DEFAULT_CHARSET_PARAMETER_VALUES = 'utf-8';
+    const VISITOR_ID_LENGTH = 16;
 
     /**
      * See piwik.js
@@ -139,32 +50,82 @@ class Tracker
     const CVAR_INDEX_ECOMMERCE_ITEM_NAME = 4;
     const CVAR_INDEX_ECOMMERCE_ITEM_CATEGORY = 5;
 
-    /**
-     * Defines how many categories can be used max when calling addEcommerceItem().
-     * @var int
-     */
-    const MAX_NUM_ECOMMERCE_ITEM_CATEGORIES = 5;
+    private $serverRequest;
+    private $apiUrl;
+    private $idSite;
+    private $pageCharset;
+    private $ip;
+    private $proxy;
+    private $currentTs;
+    private $createTs;
+    private $visitorCustomVar;
+    private $ecommerceItems = [];
+    private $attributionInfo;
+    private $eventCustomVar = [];
+    private $forcedDatetime = false;
+    private $forcedNewVisit = false;
+    private $generationTime;
+    private $pageCustomVar;
+    private $customParameters = [];
+    private $customData;
+    private $hasCookies;
+    private $token_auth;
+    private $country;
+    private $region;
+    private $city;
+    private $lat;
+    private $long;
+    private $resolution;
+    private $plugins = [];
+    private $localHour;
+    private $localMinute;
+    private $localSecond;
+    private $idPageview;
+    private $sendImageResponse = true;
+    private $cookies = [];
 
-    const DEFAULT_COOKIE_PATH = '/';
+    // Life of the visitor cookie (in sec)
+    private $configVisitorCookieTimeout = 33955200; // 13 months (365 + 28 days)
+    // Life of the session cookie (in sec)
+    private $configSessionCookieTimeout = 1800; // 30 minutes
+    // Life of the referral cookie (in sec)
+    private $configReferralCookieTimeout = 15768000; // 6 months
+
+    // Visitor Ids in order
+    private $userId;
+    private $forcedVisitorId = false;
+    private $cookieVisitorId = false;
+    private $randomVisitorId = false;
+    private $visitCount = 0;
+    private $currentVisitTs;
+    private $lastVisitTs = false;
+    private $ecommerceLastOrderTimestamp;
+
+    // Allow debug while blocking the request
+    private $requestTimeout = 600;
+    private $storedTrackingActions = [];
+
+    private $configCookiesDisabled = false;
+    private $configCookiePath = '/';
+    private $configCookieDomain = '';
+
 
     /**
      * Builds a PiwikTracker object, used to track visits, pages and Goal conversions
      * for a specific website, by using the Piwik Tracking API.
      */
-    public function __construct(ServerRequestInterface $request, string $apiUrl, int $idSite)
+    public function __construct(ServerRequestInterface $serverRequest, string $apiUrl, int $idSite)
     {
-        $server = $request->getServerParams();
+        $server = $serverRequest->getServerParams();
 
-        $this->request = $request;
+        $this->serverRequest = $serverRequest;
         $this->idSite = $idSite;
-        $this->pageCharset = self::DEFAULT_CHARSET_PARAMETER_VALUES;
-        $this->ip = $server['REMOTE_ADDR'] ?? '';
+        $this->ip = $server['REMOTE_ADDR'] ?? null;
         $this->apiUrl = $apiUrl;
 
         $this->setNewVisitorId();
 
-        $this->currentTs = time();
-        $this->createTs = $this->currentTs;
+        $this->createTs = $this->currentTs = time();
         $this->visitorCustomVar = $this->getCustomVariablesFromCookie();
     }
 
@@ -316,7 +277,7 @@ class Tracker
      */
     public function setNewVisitorId(): self
     {
-        $this->randomVisitorId = substr(md5(uniqid((string) rand(), true)), 0, self::LENGTH_VISITOR_ID);
+        $this->randomVisitorId = substr(md5(uniqid((string) rand(), true)), 0, self::VISITOR_ID_LENGTH);
         $this->userId = false;
         $this->forcedVisitorId = false;
         $this->cookieVisitorId = false;
@@ -384,49 +345,43 @@ class Tracker
     }
 
     /**
-     * Enables the bulk request feature. When used, each tracking action is stored until the
-     * doBulkTrack method is called. This method will send all tracking data at once.
-     */
-    public function enableBulkTracking()
-    {
-        $this->doBulkRequests = true;
-    }
-
-    /**
      * Enable Cookie Creation - this will cause a first party VisitorId cookie to be set when the VisitorId is set or reset
      *
      * @param string $domain (optional) Set first-party cookie domain.
      *                       Accepted values: example.com, .example.com or subdomain.example.com
      * @param string $path   (optional) Set first-party cookie path
      */
-    public function enableCookies(string $domain = '', string $path = '/')
+    public function enableCookies(string $domain = '', string $path = '/'): self
     {
         $this->configCookiesDisabled = false;
         $this->configCookieDomain = $domain;
         $this->configCookiePath = $path;
+        return $this;
     }
 
     /**
      * If image response is disabled Piwik will respond with a HTTP 204 header instead of responding with a gif.
      */
-    public function disableSendImageResponse()
+    public function disableSendImageResponse(): self
     {
         $this->sendImageResponse = false;
+        return $this;
     }
 
     /**
      * Tracks a page view
      *
      * @param  string $documentTitle Page title as it will appear in the Actions > Page titles report
-     * @return mixed  Response string or true if using bulk requests.
      */
-    public function doTrackPageView(string $documentTitle)
+    public function trackPageView(string $documentTitle): HttpClient
     {
         $this->generateNewPageviewId();
 
-        $url = $this->getUrlTrackPageView($documentTitle);
+        $url = $this->buildUrl($this->idSite, [
+            'action_name' => $documentTitle,
+        ]);
 
-        return $this->sendRequest($url);
+        return $this->createRequest($url);
     }
 
     /**
@@ -436,13 +391,25 @@ class Tracker
      * @param  string      $action   The Event's Action (Play, Pause, Duration, Add Playlist, Downloaded, Clicked...)
      * @param  string|bool $name     (optional) The Event's object Name (a particular Movie name, or Song name, or File name...)
      * @param  float|bool  $value    (optional) The Event's value
-     * @return mixed       Response string or true if using bulk requests.
      */
-    public function doTrackEvent(string $category, string $action, $name = false, $value = false)
+    public function trackEvent(string $category, string $action, $name = false, $value = false): HttpClient
     {
-        $url = $this->getUrlTrackEvent($category, $action, $name, $value);
+        if (strlen($category) === 0) {
+            throw new InvalidArgumentException('You must specify an Event Category name (Music, Videos, Games...).');
+        }
 
-        return $this->sendRequest($url);
+        if (strlen($action) === 0) {
+            throw new InvalidArgumentException('You must specify an Event action (click, view, add...).');
+        }
+
+        $url = $this->buildUrl($this->idSite, [
+            'e_c' => $category,
+            'e_a' => $action,
+            'e_n' => $name,
+            'e_v' => $value,
+        ]);
+
+        return $this->createRequest($url);
     }
 
     /**
@@ -451,13 +418,20 @@ class Tracker
      * @param  string      $contentName   The name of the content. For instance 'Ad Foo Bar'
      * @param  string      $contentPiece  The actual content. For instance the path to an image, video, audio, any text
      * @param  string|bool $contentTarget (optional) The target of the content. For instance the URL of a landing page.
-     * @return mixed       Response string or true if using bulk requests.
      */
-    public function doTrackContentImpression(string $contentName, string $contentPiece = 'Unknown', $contentTarget = false)
+    public function trackContentImpression(string $contentName, string $contentPiece = 'Unknown', $contentTarget = false): HttpClient
     {
-        $url = $this->getUrlTrackContentImpression($contentName, $contentPiece, $contentTarget);
+        if (strlen($name) == 0) {
+            throw new InvalidArgumentException('You must specify a content name');
+        }
 
-        return $this->sendRequest($url);
+        $url = $this->buildUrl($this->idSite, [
+            'c_n' => $name,
+            'c_p' => $piece,
+            'c_t' => $target,
+        ]);
+
+        return $this->createRequest($url);
     }
 
     /**
@@ -468,17 +442,29 @@ class Tracker
      * @param  string      $contentName   The name of the content. For instance 'Ad Foo Bar'
      * @param  string      $contentPiece  The actual content. For instance the path to an image, video, audio, any text
      * @param  string|bool $contentTarget (optional) The target the content leading to when an interaction occurs. For instance the URL of a landing page.
-     * @return mixed       Response string or true if using bulk requests.
      */
-    public function doTrackContentInteraction(
+    public function trackContentInteraction(
         string $interaction,
         string $contentName,
         string $contentPiece = 'Unknown',
         $contentTarget = false
-    ) {
-        $url = $this->getUrlTrackContentInteraction($interaction, $contentName, $contentPiece, $contentTarget);
+    ): HttpClient {
+        if (strlen($interaction) == 0) {
+            throw new InvalidArgumentException('You must specify a name for the interaction');
+        }
 
-        return $this->sendRequest($url);
+        if (strlen($name) == 0) {
+            throw new InvalidArgumentException('You must specify a content name');
+        }
+
+        $url = $this->buildUrl($this->idSite, [
+            'c_i' => $interaction,
+            'c_n' => $name,
+            'c_p' => $piece,
+            'c_t' => $target,
+        ]);
+
+        return $this->createRequest($url);
     }
 
     /**
@@ -488,14 +474,16 @@ class Tracker
      * @param string   $keyword      Searched query on the site
      * @param string   $category     (optional) Search engine category if applicable
      * @param bool|int $countResults (optional) results displayed on the search result page. Used to track "zero result" keywords.
-     *
-     * @return mixed Response or true if using bulk requests.
      */
-    public function doTrackSiteSearch(string $keyword, string $category = '', $countResults = false)
+    public function trackSiteSearch(string $keyword, string $category = '', $countResults = false): HttpClient
     {
-        $url = $this->getUrlTrackSiteSearch($keyword, $category, $countResults);
+        $url = $this->buildUrl($this->idSite, [
+            'search' => $keyword,
+            'search_cat' => $category,
+            'search_count' => $countResults,
+        ]);
 
-        return $this->sendRequest($url);
+        return $this->createRequest($url);
     }
 
     /**
@@ -503,28 +491,31 @@ class Tracker
      *
      * @param  int   $idGoal  Id Goal to record a conversion
      * @param  float $revenue Revenue for this conversion
-     * @return mixed Response or true if using bulk request
      */
-    public function doTrackGoal(int $idGoal, float $revenue = 0.0)
+    public function trackGoal(int $idGoal, float $revenue = 0.0): HttpClient
     {
-        $url = $this->getUrlTrackGoal($idGoal, $revenue);
+        $url = $this->buildUrl($this->idSite, [
+            'idgoal' => $idGoal,
+            'revenue' => $revenue,
+        ]);
 
-        return $this->sendRequest($url);
+        return $this->createRequest($url);
     }
 
     /**
      * Tracks a download or outlink
      *
-     * @param  string $actionUrl  URL of the download or outlink
      * @param  string $actionType Type of the action: 'download' or 'link'
-     * @return mixed  Response or true if using bulk request
+     * @param  string $actionUrl  URL of the download or outlink
      */
-    public function doTrackAction(string $actionUrl, string $actionType)
+    public function trackAction(string $actionType, string $actionUrl): HttpClient
     {
         // Referrer could be udpated to be the current URL temporarily (to mimic JS behavior)
-        $url = $this->getUrlTrackAction($actionUrl, $actionType);
+        $url = $this->buildUrl($this->idSite, [
+            $actionType => $actionUrl,
+        ]);
 
-        return $this->sendRequest($url);
+        return $this->createRequest($url);
     }
 
     /**
@@ -542,13 +533,15 @@ class Tracker
      * @param  int                      $quantity (optional) Product quantity. If not specified, will default to 1 in the Reports
      * @throws InvalidArgumentException
      */
-    public function addEcommerceItem(string $sku, string $name = '', $category = '', float $price = 0.0, int $quantity = 1)
+    public function addEcommerceItem(string $sku, string $name = '', $category = '', float $price = 0.0, int $quantity = 1): self
     {
         if (empty($sku)) {
             throw new InvalidArgumentException('You must specify a SKU for the Ecommerce item');
         }
 
         $this->ecommerceItems[] = [$sku, $name, $category, $price, $quantity];
+
+        return $this;
     }
 
     /**
@@ -559,45 +552,12 @@ class Tracker
      * Items which were in the previous cart and are not sent in later Cart updates will be deleted from the cart (in the database).
      *
      * @param  float $grandTotal Cart grandTotal (typically the sum of all items' prices)
-     * @return mixed Response or true if using bulk request
      */
-    public function doTrackEcommerceCartUpdate(float $grandTotal)
+    public function trackEcommerceCartUpdate(float $grandTotal): HttpClient
     {
-        $url = $this->getUrlTrackEcommerceCartUpdate($grandTotal);
+        $url = $this->getUrlTrackEcommerce($grandTotal);
 
-        return $this->sendRequest($url);
-    }
-
-    /**
-     * Sends all stored tracking actions at once. Only has an effect if bulk tracking is enabled.
-     *
-     * To enable bulk tracking, call enableBulkTracking().
-     *
-     * @throws Exception
-     * @return string    Response
-     */
-    public function doBulkTrack(): string
-    {
-        if (empty($this->storedTrackingActions)) {
-            throw new Exception(
-                'Error:  you must call the function doTrackPageView or doTrackGoal from this class,
-                 before calling this method doBulkTrack()'
-            );
-        }
-
-        $data = ['requests' => $this->storedTrackingActions];
-
-        // token_auth is not required by default, except if bulk_requests_require_authentication=1
-        if (!empty($this->token_auth)) {
-            $data['token_auth'] = $this->token_auth;
-        }
-
-        $postData = json_encode($data);
-        $response = $this->sendRequest($this->getBaseUrl(), 'POST', $postData, $force = true);
-
-        $this->storedTrackingActions = [];
-
-        return $response;
+        return $this->createRequest($url);
     }
 
     /**
@@ -617,17 +577,23 @@ class Tracker
      * @param  float      $discount   (optional) Discounted amount in this order
      * @return mixed      Response or true if using bulk request
      */
-    public function doTrackEcommerceOrder(
+    public function trackEcommerceOrder(
         float $orderId,
         float $grandTotal,
         float $subTotal = 0.0,
         float $tax = 0.0,
         float $shipping = 0.0,
         float $discount = 0.0
-    ) {
-        $url = $this->getUrlTrackEcommerceOrder($orderId, $grandTotal, $subTotal, $tax, $shipping, $discount);
+    ): HttpClient {
+        if (empty($orderId)) {
+            throw new Exception('You must specifiy an orderId for the Ecommerce order');
+        }
 
-        return $this->sendRequest($url);
+        $url = $this->getUrlTrackEcommerce($grandTotal, $subTotal, $tax, $shipping, $discount, $orderId);
+
+        $this->ecommerceLastOrderTimestamp = $this->getTimestamp();
+
+        return $this->createRequest($url);
     }
 
     /**
@@ -639,12 +605,11 @@ class Tracker
      *
      * @return mixed Response or true if using bulk request
      */
-    public function doPing()
+    public function doPing(): HttpClient
     {
-        $url = $this->getRequest($this->idSite);
-        $url .= '&ping=1';
+        $url = $this->buildUrl($this->idSite, ['ping' => 1]);
 
-        return $this->sendRequest($url);
+        return $this->createRequest($url);
     }
 
     /**
@@ -695,191 +660,6 @@ class Tracker
     }
 
     /**
-     * Returns URL used to track Ecommerce Cart updates
-     * Calling this function will reinitializes the property ecommerceItems to empty array
-     * so items will have to be added again via addEcommerceItem()
-     * @ignore
-     * @param mixed $grandTotal
-     */
-    public function getUrlTrackEcommerceCartUpdate($grandTotal): string
-    {
-        return $this->getUrlTrackEcommerce($grandTotal);
-    }
-
-    /**
-     * Returns URL used to track Ecommerce Orders
-     * Calling this function will reinitializes the property ecommerceItems to empty array
-     * so items will have to be added again via addEcommerceItem()
-     * @ignore
-     * @param mixed $orderId
-     * @param mixed $grandTotal
-     * @param mixed $subTotal
-     * @param mixed $tax
-     * @param mixed $shipping
-     * @param mixed $discount
-     */
-    public function getUrlTrackEcommerceOrder(
-        $orderId,
-        $grandTotal,
-        $subTotal = 0.0,
-        $tax = 0.0,
-        $shipping = 0.0,
-        $discount = 0.0
-    ): string {
-        if (empty($orderId)) {
-            throw new Exception('You must specifiy an orderId for the Ecommerce order');
-        }
-        $url = $this->getUrlTrackEcommerce($grandTotal, $subTotal, $tax, $shipping, $discount);
-        $url .= '&ec_id=' . urlencode($orderId);
-        $this->ecommerceLastOrderTimestamp = $this->getTimestamp();
-
-        return $url;
-    }
-
-    /**
-     * Builds URL to track a page view.
-     *
-     * @see doTrackPageView()
-     * @param  string $documentTitle Page view name as it will appear in Piwik reports
-     * @return string URL to piwik.php with all parameters set to track the pageview
-     */
-    public function getUrlTrackPageView(string $documentTitle = ''): string
-    {
-        $url = $this->getRequest($this->idSite);
-        if (strlen($documentTitle) > 0) {
-            $url .= '&action_name=' . urlencode($documentTitle);
-        }
-
-        return $url;
-    }
-
-    /**
-     * Builds URL to track a custom event.
-     *
-     * @see doTrackEvent()
-     * @param string      $category The Event Category (Videos, Music, Games...)
-     * @param string      $action   The Event's Action (Play, Pause, Duration, Add Playlist, Downloaded, Clicked...)
-     * @param string|null $name     (optional) The Event's object Name (a particular Movie name, or Song name, or File name...)
-     * @param float|null  $value    (optional) The Event's value
-     * @throws
-     * @return string URL to piwik.php with all parameters set to track the pageview
-     */
-    public function getUrlTrackEvent(string $category, string $action, $name = null, float $value = null): string
-    {
-        if (strlen($category) === 0) {
-            throw new InvalidArgumentException('You must specify an Event Category name (Music, Videos, Games...).');
-        }
-
-        if (strlen($action) === 0) {
-            throw new InvalidArgumentException('You must specify an Event action (click, view, add...).');
-        }
-
-        return $this->getRequest($this->idSite, [
-            'e_c' => $category,
-            'e_a' => $action,
-            'e_n' => $name,
-            'e_v' => $value,
-        ]);
-    }
-
-    /**
-     * Builds URL to track a content impression.
-     *
-     * @see doTrackContentImpression()
-     * @param  string      $name   The name of the content. For instance 'Ad Foo Bar'
-     * @param  string|null $piece  The actual content. For instance the path to an image, video, audio, any text
-     * @param  string|null $target The target of the content. For instance the URL of a landing page.
-     * @throws Exception   In case $contentName is empty
-     * @return string      URL to piwik.php with all parameters set to track the pageview
-     */
-    public function getUrlTrackContentImpression(string $name, string $piece = null, string $target = null): string
-    {
-        if (strlen($name) == 0) {
-            throw new InvalidArgumentException('You must specify a content name');
-        }
-
-        return $this->getRequest($this->idSite, [
-            'c_n' => $name,
-            'c_p' => $piece,
-            'c_t' => $target,
-        ]);
-    }
-
-    /**
-     * Builds URL to track a content impression.
-     *
-     * @see doTrackContentInteraction()
-     * @param  string      $interaction The name of the interaction with the content. For instance a 'click'
-     * @param  string      $name        The name of the content. For instance 'Ad Foo Bar'
-     * @param  string|null $piece       The actual content. For instance the path to an image, video, audio, any text
-     * @param  string|null $target      (optional) The target the content leading to when an interaction occurs. For instance the URL of a landing page.
-     * @throws Exception   In case $interaction or $contentName is empty
-     * @return string      URL to piwik.php with all parameters set to track the pageview
-     */
-    public function getUrlTrackContentInteraction(string $interaction, string $name, string $piece = null, string $target = null): string
-    {
-        if (strlen($interaction) == 0) {
-            throw new InvalidArgumentException('You must specify a name for the interaction');
-        }
-
-        if (strlen($name) == 0) {
-            throw new InvalidArgumentException('You must specify a content name');
-        }
-
-        return $this->getRequest($this->idSite, [
-            'c_i' => $interaction,
-            'c_n' => $name,
-            'c_p' => $piece,
-            'c_t' => $target,
-        ]);
-    }
-
-    /**
-     * Builds URL to track a site search.
-     *
-     * @see doTrackSiteSearch()
-     */
-    public function getUrlTrackSiteSearch(string $keyword, string $category, int $countResults): string
-    {
-        return $this->getRequest($this->idSite, [
-            'search' => $keyword,
-            'search_cat' => $category,
-            'search_count' => $countResults,
-        ]);
-    }
-
-    /**
-     * Builds URL to track a goal with idGoal and revenue.
-     *
-     * @see doTrackGoal()
-     * @param  int    $idGoal  Id Goal to record a conversion
-     * @param  float  $revenue Revenue for this conversion
-     * @return string URL to piwik.php with all parameters set to track the goal conversion
-     */
-    public function getUrlTrackGoal(int $idGoal, float $revenue = 0.0): string
-    {
-        return $this->getRequest($this->idSite, [
-            'idgoal' => $idGoal,
-            'revenue' => $revenue,
-        ]);
-    }
-
-    /**
-     * Builds URL to track a new action.
-     *
-     * @see doTrackAction()
-     * @param  string $actionUrl  URL of the download or outlink
-     * @param  string $actionType Type of the action: 'download' or 'link'
-     * @return string URL to piwik.php with all parameters set to track an action
-     */
-    public function getUrlTrackAction(string $actionUrl, string $actionType): string
-    {
-        return $this->getRequest($this->idSite, [
-            $actionType => $actionUrl,
-        ]);
-    }
-
-    /**
      * Overrides server date and time for the tracking requests.
      * By default Piwik will track requests for the "current datetime" but this function allows you
      * to track visits in the past. All times are in UTC.
@@ -926,7 +706,6 @@ class Tracker
      * A User ID can be a username, UUID or an email address, or any number or string that uniquely identifies a user or client.
      *
      * @param  string    $userId Any user ID string (eg. email address, ID, username). Must be non empty. Set to false to de-assign a user id previously set.
-     * @throws Exception
      */
     public function setUserId(string $userId): self
     {
@@ -941,10 +720,8 @@ class Tracker
      * Hash function used internally by Piwik to hash a User ID into the Visitor ID.
      *
      * Note: matches implementation of Tracker\Request->getUserIdHashed()
-     *
-     * @param $id
      */
-    public static function getUserIdHashed($id): string
+    public static function getUserIdHashed(string $id): string
     {
         return substr(sha1($id), 0, 16);
     }
@@ -974,14 +751,6 @@ class Tracker
         }
 
         return $this->randomVisitorId;
-    }
-
-    /**
-     * Returns the currently set IP address.
-     */
-    public function getIp(): string
-    {
-        return $this->ip;
     }
 
     /**
@@ -1058,8 +827,7 @@ class Tracker
      */
     public function setResolution(int $width, int $height): self
     {
-        $this->width = $width;
-        $this->height = $height;
+        $this->resolution = [$width, $height];
         return $this;
     }
 
@@ -1070,16 +838,6 @@ class Tracker
     public function setBrowserHasCookies(bool $bool): self
     {
         $this->hasCookies = $bool;
-        return $this;
-    }
-
-    /**
-     * Will append a custom string at the end of the Tracking request.
-     * @param mixed $value
-     */
-    public function setDebugStringAppend(string $name, $value): self
-    {
-        $this->DEBUG_APPEND_URL[$name] = $value;
         return $this;
     }
 
@@ -1117,16 +875,18 @@ class Tracker
      * from the request and write updated cookies in the response (using setrawcookie).
      * This can be disabled by calling this function.
      */
-    public function disableCookieSupport()
+    public function disableCookieSupport(): self
     {
         $this->configCookiesDisabled = true;
+
+        return $this;
     }
 
     /**
      * Returns the maximum number of seconds the tracker will spend waiting for a response
      * from Piwik. Defaults to 600 seconds.
      */
-    public function getRequestTimeout()
+    public function getRequestTimeout(): int
     {
         return $this->requestTimeout;
     }
@@ -1151,10 +911,11 @@ class Tracker
      * If a proxy is needed to look up the address of the Piwik site, set it with this
      * @param string $proxy IP as string, for example "173.234.92.107"
      */
-    public function setProxy(string $proxy, int $proxyPort = 80)
+    public function setProxy(string $proxy, int $proxyPort = 80): self
     {
-        $this->proxy = $proxy;
-        $this->proxyPort = $proxyPort;
+        $this->proxy = "{$proxy}:{$port}";
+
+        return $this;
     }
 
     /**
@@ -1163,123 +924,53 @@ class Tracker
      * @param $name
      * @param $value
      */
-    public function setOutgoingTrackerCookie($name, $value)
+    public function setCookies($name, $value): self
     {
         if ($value === null) {
-            unset($this->outgoingTrackerCookies[$name]);
+            unset($this->cookies[$name]);
         } else {
-            $this->outgoingTrackerCookies[$name] = $value;
+            $this->cookies[$name] = $value;
         }
-    }
-
-    /**
-     * Gets a cookie which was set by the tracking server.
-     *
-     * @param $name
-     *
-     * @return null|string
-     */
-    public function getIncomingTrackerCookie($name)
-    {
-        return $this->incomingTrackerCookies[$name] ?? null;
-    }
-
-    /**
-     * If the proxy IP and the proxy port have been set, with the setProxy() function
-     * returns a string, like "173.234.92.107:80"
-     */
-    private function getProxy()
-    {
-        if (isset($this->proxy) && isset($this->proxyPort)) {
-            return $this->proxy.':'.$this->proxyPort;
-        }
-        return null;
+        return $this;
     }
 
     /**
      * @ignore
      * @param null|mixed $data
      */
-    private function sendRequest(string $url, string $method = 'GET', $data = null, bool $force = false)
+    private function createRequest(string $url, string $method = 'GET', $data = null): HttpClient
     {
-        self::$DEBUG_LAST_REQUESTED_URL = $url;
-
-        $acceptLanguage = $this->request->getHeaderLine('Accept-Language');
-        $userAgent = $this->request->getHeaderLine('User-Agent');
-
-        // if doing a bulk request, store the url
-        if ($this->doBulkRequests && !$force) {
-            if (empty($this->storedTrackingActions)) {
-                $this->storedTrackingActions[]
-                    = $url
-                    . (!empty($userAgent) ? ('&ua=' . urlencode($userAgent)) : '')
-                    . (!empty($acceptLanguage) ? ('&lang=' . urlencode($acceptLanguage)) : '');
-            } else {
-                $this->storedTrackingActions[] = $url;
-            }
-
-            // Clear custom variables so they don't get copied over to other users in the bulk request
-            $this->clearCustomVariables();
-            $this->clearCustomTrackingParameters();
-
-            return true;
-        }
-
-        $proxy = $this->getProxy();
+        $acceptLanguage = $this->serverRequest->getHeaderLine('Accept-Language');
+        $userAgent = $this->serverRequest->getHeaderLine('User-Agent');
 
         $client = new HttpClient($method, $url);
 
         $client->setUserAgent($userAgent)
             ->setData($data)
             ->setTimeout($this->requestTimeout)
-            ->setAcceptLanguage($this->acceptLanguage)
-            ->setProxy($proxy)
-            ->setCookies($this->outgoingTrackerCookies);
+            ->setAcceptLanguage($acceptLanguage)
+            ->setProxy($this->proxy)
+            ->setCookies($this->cookies);
 
-        $client->send();
-
-        $this->incomingTrackerCookies = $client->getCookies();
-
-        return $client->getContent();
+        return $client;
     }
 
     /**
      * Returns current timestamp, or forced timestamp/datetime if it was set
-     * @return string|int
      */
-    private function getTimestamp()
+    private function getTimestamp(): int
     {
         return !empty($this->forcedDatetime) ? strtotime($this->forcedDatetime) : time();
     }
 
     /**
-     * Returns the base URL for the piwik server.
-     */
-    private function getBaseUrl(): string
-    {
-        if (empty($this->apiUrl)) {
-            throw new Exception(
-                'You must first set the Piwik Tracker URL by calling
-                 PiwikTracker::$URL = \'http://your-website.org/piwik/\';'
-            );
-        }
-        if (strpos($this->apiUrl, '/piwik.php') === false
-            && strpos($this->apiUrl, '/proxy-piwik.php') === false
-        ) {
-            $this->apiUrl .= '/piwik.php';
-        }
-
-        return $this->apiUrl;
-    }
-
-    /**
      * @ignore
      */
-    private function getRequest(int $idSite, array $extraParams = []): string
+    private function buildUrl(int $idSite, array $extraParams = []): string
     {
         $this->setFirstPartyCookies();
 
-        $getParams = $this->request->getQueryParams();
+        $getParams = $this->serverRequest->getQueryParams();
 
         $params = [
             'idsite' => $idSite,
@@ -1296,7 +987,7 @@ class Tracker
             'uid' => $this->userId,
             'cdt' => $this->forcedDatetime,
             'new_visit' => 1,
-            'token_auth' => (!empty($this->token_auth) && !$this->doBulkRequests) ? $this->token_auth : null,
+            'token_auth' => $this->token_auth,
 
             // Values collected from cookie
             '_idts' => $this->createTs,
@@ -1308,7 +999,7 @@ class Tracker
             'h' => $this->localHour,
             'm' => $this->localMinute,
             's' => $this->localSecond,
-            'res' => (!empty($this->width) && !empty($this->height)) ? $this->width . 'x' . $this->height : null,
+            'res' => $this->resolution ? implode('x', $this->resolution) : null,
             'cookie' => $this->hasCookies,
 
             // Various important attributes
@@ -1316,12 +1007,12 @@ class Tracker
             '_cvar' => $this->visitorCustomVar,
             'cvar' => $this->pageCustomVar,
             'e_cvar' => $this->eventCustomVar,
-            'gt_ms' => (int) $this->generationTime,
+            'gt_ms' => $this->generationTime,
 
             // URL parameters
-            'url' => (string) $this->request->getUri(),
-            'urlref' => $this->request->getHeaderLine('Referer'),
-            'cs' => (!empty($this->pageCharset) && $this->pageCharset != self::DEFAULT_CHARSET_PARAMETER_VALUES) ? $this->pageCharset : null,
+            'url' => (string) $this->serverRequest->getUri(),
+            'urlref' => $this->serverRequest->getHeaderLine('Referer'),
+            'cs' => $this->pageCharset,
 
             // unique pageview id
             'pv_id' => $this->idPageview,
@@ -1353,9 +1044,9 @@ class Tracker
             $params['_id'] = $this->getVisitorId();
         }
 
-        $query = self::buildQuery($extraParams + $params + $this->plugins + $this->customParameters + $this->DEBUG_APPEND_URL);
+        $query = self::buildQuery($extraParams + $params + $this->plugins + $this->customParameters);
 
-        $url = $this->getBaseUrl().$query;
+        $url = $this->apiUrl.$query;
 
         // Reset page level custom variables after this page view
         $this->pageCustomVar = [];
@@ -1380,7 +1071,7 @@ class Tracker
             return false;
         }
 
-        $cookies = $this->request->getCookieParams();
+        $cookies = $this->serverRequest->getCookieParams();
 
         if (empty($cookies)) {
             return false;
@@ -1417,6 +1108,7 @@ class Tracker
 
         // Set the 'ref' cookie
         $attributionInfo = $this->getAttributionInfo();
+
         if (!empty($attributionInfo)) {
             $this->setCookie('ref', $attributionInfo, $this->configReferralCookieTimeout);
         }
@@ -1426,8 +1118,16 @@ class Tracker
 
         // Set the 'id' cookie
         $visitCount = $this->visitCount + 1;
-        $cookieValue = $this->getVisitorId() . '.' . $this->createTs . '.' . $visitCount . '.' . $this->currentTs .
-            '.' . $this->lastVisitTs . '.' . $this->ecommerceLastOrderTimestamp;
+        $cookieValue = sprintf(
+            '%s.%s.%s.%s.%s.%s',
+            $this->getVisitorId(),
+            $this->createTs,
+            $visitCount,
+            $this->currentTs,
+            $this->lastVisitTs,
+            $this->ecommerceLastOrderTimestamp
+        );
+
         $this->setCookie('id', $cookieValue, $this->configVisitorCookieTimeout);
 
         // Set the 'cvar' cookie
@@ -1477,13 +1177,17 @@ class Tracker
     private function loadVisitorIdCookie(): bool
     {
         $idCookie = $this->getCookieMatchingName('id');
+
         if ($idCookie === false) {
             return false;
         }
+
         $parts = explode('.', $idCookie);
-        if (strlen($parts[0]) != self::LENGTH_VISITOR_ID) {
+
+        if (strlen($parts[0]) !== self::VISITOR_ID_LENGTH) {
             return false;
         }
+
         /* $this->cookieVisitorId provides backward compatibility since getVisitorId()
         didn't change any existing VisitorId value */
         $this->cookieVisitorId = $parts[0];
@@ -1491,6 +1195,7 @@ class Tracker
         $this->visitCount = (int) $parts[2];
         $this->currentVisitTs = $parts[3];
         $this->lastVisitTs = $parts[4];
+
         if (isset($parts[5])) {
             $this->ecommerceLastOrderTimestamp = $parts[5];
         }
@@ -1504,10 +1209,10 @@ class Tracker
     private function getCookieName(string $cookieName): string
     {
         // NOTE: If the cookie name is changed, we must also update the method in piwik.js with the same name.
-        $host = $this->request->getUri()->getHost() ?: 'unknown';
+        $host = $this->serverRequest->getUri()->getHost() ?: 'unknown';
         $hash = substr(sha1(($this->configCookieDomain === '' ? $host : $this->configCookieDomain) . $this->configCookiePath), 0, 4);
 
-        return self::FIRST_PARTY_COOKIES_PREFIX . $cookieName . '.' . $this->idSite . '.' . $hash;
+        return sprintf('%%s.%s.%s', self::FIRST_PARTY_COOKIES_PREFIX, $cookieName, $this->idSite, $hash);
     }
 
     /**
@@ -1518,11 +1223,9 @@ class Tracker
      *
      * @ignore
      */
-    private function getUrlTrackEcommerce(float $grandTotal, float $subTotal = 0.0, float $tax = 0.0, float $shipping = 0.0, float $discount = 0.0): string
+    private function getUrlTrackEcommerce(float $grandTotal, float $subTotal = 0.0, float $tax = 0.0, float $shipping = 0.0, float $discount = 0.0, float $orderId = null): string
     {
-        $url = $this->getRequest($this->idSite);
-
-        $query = self::buildQuery([
+        $url = $this->buildUrl($this->idSite, [
             'idgoal' => 0,
             'revenue' => $grandTotal ?: null,
             'ec_st' => $subTotal ?: null,
@@ -1530,11 +1233,12 @@ class Tracker
             'ec_sh' => $shipping ?: null,
             'ec_dt' => $discount ?: null,
             'ec_items' => $this->ecommerceItems ? json_encode($this->ecommerceItems) : null,
+            'ec_id' => $orderId,
         ]);
 
         $this->ecommerceItems = [];
 
-        return $url.$query;
+        return $url;
     }
 
     private function generateNewPageviewId()
