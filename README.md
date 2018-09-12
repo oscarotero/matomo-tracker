@@ -1,5 +1,7 @@
 # Matomo tracker
 
+[![Build Status](https://travis-ci.com/oscarotero/matomo-tracker.svg?branch=master)](https://travis-ci.com/oscarotero/matomo-tracker)
+
 Simple library to generate [Matomo](https://matomo.org/) tracker urls that you can use to insert tracking images in your site.
 It's compatible with [PSR-7 `ServerRequestInterfaces`](https://www.php-fig.org/psr/psr-7/#321-psrhttpmessageserverrequestinterface)
 
