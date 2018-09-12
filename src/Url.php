@@ -129,7 +129,7 @@ class Url
      *
      * @param string $keyword      Searched query on the site
      * @param string $category     Search engine category if applicable
-     * @param int    $countResults results displayed on the search result page. Used to track "zero result" keywords.
+     * @param int    $countResults Results displayed on the search result page. Used to track "zero result" keywords.
      */
     public function siteSearch(string $keyword, string $category = null, $countResults = null): self
     {
@@ -176,9 +176,10 @@ class Url
     }
 
     /**
-     * Force the action to be recorded for a specific User. The User ID is a string representing a given user in your system.
-     *
-     * A User ID can be a username, UUID or an email address, or any number or string that uniquely identifies a user or client.
+     * Force the action to be recorded for a specific User.
+     * The User ID is a string representing a given user in your system.
+     * A User ID can be a username, UUID or an email address,
+     * or any number or string that uniquely identifies a user or client.
      */
     public function userId(string $userId = null): self
     {
