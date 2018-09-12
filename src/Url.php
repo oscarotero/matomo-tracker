@@ -1,80 +1,68 @@
 <?php
 declare(strict_types = 1);
 
-namespace Middlewares\MatomoTracker;
+namespace MatomoTracker;
 
 use InvalidArgumentException;
 use Psr\Http\Message\ServerRequestInterface;
 
-class Tracker
+class Url
 {
     const API_VERSION = 1;
 
-    private $apiUrl;
-    private $idSite;
-    private $idPageview;
-    private $userId;
-    private $requests = [];
-    private $tokenAuth;
-    private $ip;
     private $url;
-    private $urlRef;
-    private $acceptLanguage;
-    private $userAgent;
+    private $params;
 
-    public function __construct(ServerRequestInterface $serverRequest, string $apiUrl, int $idSite)
+    public static function createFromServerRequest(ServerRequestInterface $serverRequest, string $url, int $idSite): Url
     {
-        $this->apiUrl = $apiUrl;
-        $this->idSite = $idSite;
-
-        $this->idPageview = self::generateRandomId(6);
-
         $server = $serverRequest->getServerParams();
 
-        $this->ip = $server['REMOTE_ADDR'] ?? null;
-        $this->url = (string) $serverRequest->getUri();
-        $this->urlRef = $serverRequest->getHeaderLine('Referer') ?: null;
-        $this->acceptLanguage = $serverRequest->getHeaderLine('Accept-Language');
-        $this->userAgent = $serverRequest->getHeaderLine('User-Agent');
+        return (new static($url, $idSite))
+            ->url((string) $serverRequest->getUri())
+            ->referrer($serverRequest->getHeaderLine('Referer') ?: null)
+            ->ip($server['REMOTE_ADDR'] ?? null);
     }
 
-    /**
-     * Push a new request to the tracker
-     */
-    public function push(array $params = []): self
+    public function __construct(string $url, int $idSite)
     {
-        $params += [
-            'idsite' => $this->idSite,
+        $this->url = $url;
+
+        $this->params = [
+            'idsite' => $idSite,
             'rec' => 1,
             'apiv' => self::API_VERSION,
-            'send_image' => 0,
-
-            'pv_id' => $this->idPageview,
-            'url' => $this->url,
-            'urlref' => $this->urlRef,
-
-            'cip' => $this->ip,
-            'uid' => $this->userId,
+            'pv_id' => self::generateRandomId(6),
         ];
+    }
 
-        $this->requests[] = self::buildQuery($params);
+    public function __toString()
+    {
+        return $this->url.self::buildQuery($this->params);
+    }
+
+    public function set(array $values): self
+    {
+        foreach ($values as $key => $value) {
+            $this->params[$key] = $value;
+        }
 
         return $this;
     }
 
-    public function createRequest(): HttpClient
+    /**
+     * Set the full URL for the current action.
+     */
+    public function url(string $url = null): self
     {
-        $client = new HttpClient('POST', $this->apiUrl);
+        return $this->set(['url' => $url]);
+    }
 
-        $client->setUserAgent($this->userAgent)
-            ->addHeader("Accept-Language: {$this->acceptLanguage}")
-            ->addHeader('Content-Type: application/json')
-            ->setData([
-                'requests' => $this->requests,
-                'token_auth' => $this->tokenAuth,
-            ]);
-
-        return $client;
+    /**
+     * Set the full URL for the current action.
+     */
+    public function referrer(string $url = null): self
+    {
+        return $this->set(['urlref' => $url]);
     }
 
     /**
@@ -82,9 +70,9 @@ class Tracker
      *
      * @param string $documentTitle Page title as it will appear in the Actions > Page titles report
      */
-    public function trackPageView(string $documentTitle): self
+    public function title(string $documentTitle): self
     {
-        return $this->push(['action_name' => $documentTitle]);
+        return $this->set(['action_name' => $documentTitle]);
     }
 
     /**
@@ -95,7 +83,7 @@ class Tracker
      * @param string $name     The Event's object Name (a particular Movie name, or Song name, or File name...)
      * @param float  $value    The Event's value
      */
-    public function trackEvent(string $category, string $action, $name = null, $value = null): self
+    public function event(string $category, string $action, $name = null, $value = null): self
     {
         if (strlen($category) === 0) {
             throw new InvalidArgumentException('You must specify an Event Category name (Music, Videos, Games...).');
@@ -105,7 +93,7 @@ class Tracker
             throw new InvalidArgumentException('You must specify an Event action (click, view, add...).');
         }
 
-        return $this->push([
+        return $this->set([
             'e_c' => $category,
             'e_a' => $action,
             'e_n' => $name,
@@ -121,13 +109,13 @@ class Tracker
      * @param string $target      The target of the content. For instance the URL of a landing page.
      * @param string $interaction The name of the interaction with the content. For instance a 'click'
      */
-    public function trackContent(string $name, string $piece = 'Unknown', $target = null, $interaction = null): self
+    public function content(string $name, string $piece = 'Unknown', $target = null, $interaction = null): self
     {
         if (strlen($name) === 0) {
             throw new InvalidArgumentException('You must specify a content name');
         }
 
-        return $this->push([
+        return $this->set([
             'c_i' => $interaction,
             'c_n' => $name,
             'c_p' => $piece,
@@ -143,9 +131,9 @@ class Tracker
      * @param string $category     Search engine category if applicable
      * @param int    $countResults results displayed on the search result page. Used to track "zero result" keywords.
      */
-    public function trackSiteSearch(string $keyword, string $category = null, $countResults = null): self
+    public function siteSearch(string $keyword, string $category = null, $countResults = null): self
     {
-        return $this->push([
+        return $this->set([
             'search' => $keyword,
             'search_cat' => $category,
             'search_count' => $countResults,
@@ -158,9 +146,9 @@ class Tracker
      * @param int   $idGoal  Id Goal to record a conversion
      * @param float $revenue Revenue for this conversion
      */
-    public function trackGoal(int $idGoal, float $revenue = 0.0): self
+    public function goal(int $idGoal, float $revenue = 0.0): self
     {
-        return $this->push([
+        return $this->set([
             'idgoal' => $idGoal,
             'revenue' => $revenue,
         ]);
@@ -169,20 +157,22 @@ class Tracker
     /**
      * Tracks a download
      */
-    public function trackDownload(string $url): self
+    public function download(string $url): self
     {
-        return $this->push(['download' => $url]);
+        return $this->set(['download' => $url]);
     }
 
     /**
      * Overrides IP address
      * Allowed only for Admin/Super User, must be used along with setTokenAuth()
      */
-    public function setIp(string $ip): self
+    public function ip(string $ip = null): self
     {
-        $this->ip = $ip;
+        if ($ip === '') {
+            throw new InvalidArgumentException('IP cannot be empty.');
+        }
 
-        return $this;
+        return $this->set(['cip' => $ip]);
     }
 
     /**
@@ -190,15 +180,25 @@ class Tracker
      *
      * A User ID can be a username, UUID or an email address, or any number or string that uniquely identifies a user or client.
      */
-    public function setUserId(string $userId): self
+    public function userId(string $userId = null): self
     {
         if ($userId === '') {
             throw new InvalidArgumentException('User ID cannot be empty.');
         }
 
-        $this->userId = $userId;
+        return $this->set(['uid' => $userId]);
+    }
 
-        return $this;
+    /**
+     * Set a six character unique ID that identifies which actions were performed on a specific page view.
+     */
+    public function pageId(string $pageId = null): self
+    {
+        if ($pageId === '') {
+            throw new InvalidArgumentException('Page ID cannot be empty.');
+        }
+
+        return $this->set(['pv_id' => $pageId]);
     }
 
     /**
@@ -211,11 +211,13 @@ class Tracker
      *
      * @param string $tokenAuth
      */
-    public function setTokenAuth(string $tokenAuth): self
+    public function tokenAuth(string $tokenAuth): self
     {
-        $this->tokenAuth = $tokenAuth;
+        if (strlen($tokenAuth) === 32) {
+            throw new InvalidArgumentException('Invalid authorization key.');
+        }
 
-        return $this;
+        return $this->set(['token_auth' => $tokenAuth]);
     }
 
     private static function generateRandomId(int $length)

@@ -1,22 +1,22 @@
 {
-    "name": "middlewares/matomo-tracker",
+    "name": "oscarotero/matomo-tracker",
     "type": "library",
-    "description": "A matomo-tracker repository for PSR-15 middleware packages",
+    "description": "A matomo-tracker url generator compatible with PSR-7",
     "license": "MIT",
     "keywords": [
         "psr-7",
-        "psr-15",
-        "middleware",
         "server",
-        "http"
+        "http",
+        "matomo",
+        "piwik",
+        "tracker"
     ],
-    "homepage": "https://github.com/middlewares/matomo-tracker",
+    "homepage": "https://github.com/oscarotero/matomo-tracker",
     "support": {
-        "issues": "https://github.com/middlewares/matomo-tracker/issues"
+        "issues": "https://github.com/oscarotero/matomo-tracker/issues"
     },
     "require": {
-        "php": "^7.0",
-        "psr/http-server-middleware": "^1.0"
+        "php": "^7.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^6.0|^7.0",
@@ -27,12 +27,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Middlewares\\": "src/"
+            "MatomoTracker\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Middlewares\\Tests\\": "tests/"
+            "MatomoTracker\\Tests\\": "tests/"
         }
     },
     "scripts": {

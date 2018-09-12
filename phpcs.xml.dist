@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<ruleset name="Middlewares coding standard">
-    <description>Middlewares coding standard</description>
+<ruleset name="Coding standard">
+    <description>Coding standard</description>
 
     <!-- display progress -->
     <arg value="p"/>
