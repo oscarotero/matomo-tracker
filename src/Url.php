@@ -76,6 +76,15 @@ class Url
     }
 
     /**
+     * Set a random value to avoid the tracking request being cached by the browser or a proxy.
+     * Set null to generate a value automatically
+     */
+    public function rand(string $rand = null): self
+    {
+        return $this->set(['rand' => $rand ?: time()]);
+    }
+
+    /**
      * Tracks an event
      *
      * @param string $category The Event Category (Videos, Music, Games...)
