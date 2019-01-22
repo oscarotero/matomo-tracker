@@ -212,6 +212,22 @@ class Url
     }
 
     /**
+     * Tracks a campaign.
+     */
+    public function campaign(string $name, string $keyword = null, string $source = null): self
+    {
+        if ($name === '') {
+            throw new InvalidArgumentException('Campaign name cannot be empty.');
+        }
+
+        return $this->set([
+            'pk_campaign' => $name,
+            'pk_kwd' => $keyword,
+            'pk_source' => $source,
+        ]);
+    }
+
+    /**
      * Some Tracking API functionality requires express authentication, using either the
      * Super User token_auth, or a user with 'admin' access to the website.
      *
