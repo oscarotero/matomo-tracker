@@ -27,7 +27,7 @@ class Url
         $protocol = ($server['HTTPS'] ?? 'off') === 'on' ? 'https' : 'http';
 
         return (new static($url, $idSite))
-            ->url("{$protocol}://{$server[HTTP_HOST]}{$server[REQUEST_URI]}")
+            ->url("{$protocol}://{$server['HTTP_HOST']}{$server['REQUEST_URI']}")
             ->referrer($server['HTTP_REFERER'] ?? null);
     }
 
