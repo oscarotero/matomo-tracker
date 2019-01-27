@@ -19,8 +19,7 @@ class Url
 
         return (new static($url, $idSite))
             ->url((string) $serverRequest->getUri())
-            ->referrer($serverRequest->getHeaderLine('Referer') ?: null)
-            ->ip($server['REMOTE_ADDR'] ?? null);
+            ->referrer($serverRequest->getHeaderLine('Referer') ?: null);
     }
 
     public static function createFromServerArray(array $server, string $url, int $idSite)
@@ -29,8 +28,7 @@ class Url
 
         return (new static($url, $idSite))
             ->url("{$protocol}://$server[HTTP_HOST]/$server[REQUEST_URI]")
-            ->referrer($server['HTTP_REFERER'] ?? null)
-            ->ip($server['REMOTE_ADDR'] ?? null);
+            ->referrer($server['HTTP_REFERER'] ?? null);
     }
 
     public function __construct(string $url, int $idSite)
