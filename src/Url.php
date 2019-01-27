@@ -27,7 +27,7 @@ class Url
         $protocol = ($server['HTTPS'] ?? 'off') === 'on' ? 'https' : 'http';
 
         return (new static($url, $idSite))
-            ->url("{$protocol}://$server[HTTP_HOST]/$server[REQUEST_URI]")
+            ->url("{$protocol}://{$server[HTTP_HOST]}{$server[REQUEST_URI]}")
             ->referrer($server['HTTP_REFERER'] ?? null);
     }
 
@@ -217,22 +217,6 @@ class Url
         }
 
         return $this->set(['pv_id' => $pageId]);
-    }
-
-    /**
-     * Tracks a campaign.
-     */
-    public function campaign(string $name, string $keyword = null, string $source = null): self
-    {
-        if ($name === '') {
-            throw new InvalidArgumentException('Campaign name cannot be empty.');
-        }
-
-        return $this->set([
-            'pk_campaign' => $name,
-            'pk_kwd' => $keyword,
-            'pk_source' => $source,
-        ]);
     }
 
     /**
