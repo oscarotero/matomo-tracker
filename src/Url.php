@@ -23,6 +23,16 @@ class Url
             ->ip($server['REMOTE_ADDR'] ?? null);
     }
 
+    public static function createFromServerArray(array $server, string $url, int $idSite)
+    {
+        $protocol = ($server['HTTPS'] ?? 'off') === 'on' ? 'https' : 'http';
+
+        return (new static($url, $idSite))
+            ->url("{$protocol}://$server[HTTP_HOST]/$server[REQUEST_URI]")
+            ->referrer($server['HTTP_REFERER'] ?? null)
+            ->ip($server['REMOTE_ADDR'] ?? null);
+    }
+
     public function __construct(string $url, int $idSite)
     {
         $this->url = $url;
